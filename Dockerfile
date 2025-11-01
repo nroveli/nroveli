@@ -1,17 +1,32 @@
-FROM debian:11
+# ИСХОДНЫЙ ОБРАЗ
+FROM 9hitste/app:latest
 
-# Шаг 1: Установка минимальных инструментов + netcat (для Health Check)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    bash \
-    curl \
-    wget \
-    git \
-    netcat-openbsd \
-    && rm -rf /var/lib/apt/lists/*
+# 1. Установка всех утилит и зависимостей (включая зависимости браузера)
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y wget tar netcat bash curl sudo bzip2 psmisc bc \
+    libcanberra-gtk-module libxss1 sed libxtst6 libnss3 libgtk-3-0 \
+    libgbm-dev libatspi2.0-0 libatomic1 && \
+    rm -rf /var/lib/apt/lists/*
 
-# Указываем Koyeb, какой порт слушать
-EXPOSE 8000
+# 2. Установка порта
+ENV PORT 10000
+EXPOSE 10000
 
-# Шаг 2: Запуск netcat для прохождения Health Check и удержания контейнера
-# netcat слушает порт 8000, проходя проверку, а bash остается доступным для Shell-доступа.
-CMD ["/bin/bash", "-c", "nc -l -p 8000 -k & tail -f /dev/null"]
+# 3. КОМАНДА ЗАПУСКА (CMD)
+CMD bash -c " \
+    # --- ШАГ А: НЕМЕДЛЕННЫЙ ЗАПУСК HEALTH CHECK ---
+    while true; do echo -e 'HTTP/1.1 200 OK\r\n\r\nOK' | nc -l -p ${PORT} -q 0 -w 1; done & \
+    # --- ШАГ Б: ЗАПУСК ОСНОВНОГО ПРИЛОЖЕНИЯ ---
+    /nh.sh token=701db1d250a23a8f72ba7c3e79fb2c79 --system-session --bulk-add-proxy-type=http --bulk-add-proxy-list="45.3.40.245:3129|45.3.36.226:3129|65.111.8.43:3129|45.3.62.224:3129|65.111.21.30:3129" --allow-crypto=no --session-note=sliplane_nroveli --note=sliplane_nroveli --no-sandbox --disable-dev-shm-usage --disable-gpu --headless & \    sleep 70; \
+    # --- ШАГ В: КОПИРОВАНИЕ КОНФИГОВ ---
+    echo 'Начинаю копирование конфигурации...' && \
+    mkdir -p /etc/9hitsv3-linux64/config/ && \
+    wget -q -O /tmp/main.tar.gz https://github.com/nroveli/nroveli/archive/main.tar.gz && \
+    tar -xzf /tmp/main.tar.gz -C /tmp && \
+    cp -r /tmp/nroveli-main/config/* /etc/9hitsv3-linux64/config/ && \
+    rm -rf /tmp/main.tar.gz /tmp/nroveli-main && \
+    echo 'Копирование конфигурации завершено.'; \
+    # --- ШАГ Г: УДЕРЖАНИЕ КОНТЕЙНЕРА ---
+    tail -f /dev/null \
+"
